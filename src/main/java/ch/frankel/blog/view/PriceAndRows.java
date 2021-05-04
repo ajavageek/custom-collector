@@ -5,12 +5,7 @@ import ch.frankel.blog.entity.Product;
 
 import java.math.BigDecimal;
 import java.util.*;
-import java.util.Map.Entry;
-import java.util.function.BiConsumer;
-import java.util.function.BinaryOperator;
-import java.util.function.Function;
-import java.util.function.Supplier;
-import java.util.stream.Collector;
+import java.util.stream.Collectors;
 
 public class PriceAndRows {
 
@@ -72,43 +67,11 @@ public class PriceAndRows {
         return cart.getProducts()
                 .entrySet()
                 .stream()
-                .collect(new PriceAndRowsCollector());
-    }
-
-    private static class PriceAndRowsCollector implements Collector<Entry<Product, Integer>, PriceAndRows, PriceAndRows> {
-
-        @Override
-        public Supplier<PriceAndRows> supplier() {
-            return PriceAndRows::new;
-        }
-
-        @Override
-        public BiConsumer<PriceAndRows, Entry<Product, Integer>> accumulator() {
-            return (priceAndRows, entry) -> {
-                var row = new CartRow(entry);
-                priceAndRows.price = priceAndRows.price.add(row.getRowPrice());
-                priceAndRows.rows.add(row);
-            };
-        }
-
-        @Override
-        public BinaryOperator<PriceAndRows> combiner() {
-            return (c1, c2) -> {
-                c1.price = c1.price.add(c2.price);
-                var rows = new ArrayList<>(c1.rows);
-                rows.addAll(c2.rows);
-                return new PriceAndRows(c1.price, rows);
-            };
-        }
-
-        @Override
-        public Function<PriceAndRows, PriceAndRows> finisher() {
-            return Function.identity();
-        }
-
-        @Override
-        public Set<Characteristics> characteristics() {
-            return Set.of(Characteristics.IDENTITY_FINISH);
-        }
+                .map(CartRow::new)
+                .collect(Collectors.teeing(
+                        Collectors.reducing(BigDecimal.ZERO, CartRow::getRowPrice, BigDecimal::add),
+                        Collectors.toList(),
+                        PriceAndRows::new
+                ));
     }
 }
