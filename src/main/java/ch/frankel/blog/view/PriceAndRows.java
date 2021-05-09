@@ -13,6 +13,10 @@ import java.util.function.Supplier;
 import java.util.stream.Collector;
 
 public class PriceAndRows {
+    private static final Function<Cart, PriceAndRows> IMPL =
+                        (Boolean.getBoolean("custom.collector.reducing"))
+        ? PriceAndRows::getPriceAndRowsViaReduce
+        : PriceAndRows::getPriceAndRowsViaCollect;
 
     private BigDecimal price;
     private final List<CartRow> rows = new ArrayList<>();
@@ -69,6 +73,40 @@ public class PriceAndRows {
     }
 
     public static PriceAndRows getPriceAndRows(Cart cart) {
+        return IMPL.apply(cart);
+    }
+
+    private static PriceAndRows getPriceAndRowsViaReduce(Cart cart) {
+        class Tally {
+            private BigDecimal price = BigDecimal.ZERO;
+            private final Deque<CartRow> rows = new ArrayDeque<>();
+
+            Tally successor(Entry<Product, Integer> entry) {
+                final var row = new CartRow(entry);
+                price = price.add(row.getRowPrice());
+                rows.addLast(row);
+                return this;
+            }
+
+            PriceAndRows newPriceAndRows() {
+                return new PriceAndRows(
+                    price,
+                    List.of(rows.toArray(new CartRow[rows.size()])));
+            }
+        }
+
+        return cart.getProducts()
+                .entrySet()
+                .stream()
+                .reduce(new Tally(),
+                        Tally::successor,
+                        (left, right) -> {
+                                throw new UnsupportedOperationException();
+                        })
+                .newPriceAndRows();
+    }
+
+    private static PriceAndRows getPriceAndRowsViaCollect(Cart cart) {
         return cart.getProducts()
                 .entrySet()
                 .stream()
